@@ -1,0 +1,17 @@
+fastapi
+uvicorn
+sqlalchemy[asyncio]
+pydantic
+pydantic-settings
+python-jose[cryptography]
+passlib[bcrypt]
+yfinance
+pandas
+numpy
+scipy
+scikit-learn
+plotly
+slowapi
+psutil
+asyncpg
+razorpay
