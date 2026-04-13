@@ -175,3 +175,37 @@ export async function verifyPayment(payload: {
     body: JSON.stringify(payload),
   });
 }
+
+// ---- Portfolio helpers ----
+
+export async function checkPortfolio() {
+  return fetchWithAuth("/portfolio", {
+    method: "GET",
+  });
+}
+
+export async function getPortfolioMetrics() {
+  return fetchWithAuth("/portfolio/metrics", {
+    method: "GET",
+  });
+}
+
+export async function createPortfolio(assets: Array<{ ticker: string; weight: number }>) {
+  return fetchWithAuth("/portfolio", {
+    method: "POST",
+    body: JSON.stringify({ assets }),
+  });
+}
+
+export async function addAssetToPortfolio(ticker: string, weight: number) {
+  return fetchWithAuth("/portfolio/add-asset", {
+    method: "POST",
+    body: JSON.stringify({ ticker, weight }),
+  });
+}
+
+export async function optimizePortfolio() {
+  return fetchWithAuth("/portfolio/optimize", {
+    method: "POST",
+  });
+}

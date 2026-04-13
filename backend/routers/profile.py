@@ -124,8 +124,12 @@ async def trial_status(current_user: User = Depends(get_current_user)):
     if current_user.tier != "trial":
         return {"on_trial": False, "tier": current_user.tier}
     now = datetime.now(timezone.utc)
-    days_left = (current_user.trial_expires_at - now).days
-    is_expired = now > current_user.trial_expires_at
+    # Handle both timezone-aware and naive datetimes
+    trial_expires = current_user.trial_expires_at
+    if trial_expires.tzinfo is None:
+        trial_expires = trial_expires.replace(tzinfo=timezone.utc)
+    days_left = (trial_expires - now).days
+    is_expired = now > trial_expires
     return {
         "on_trial": True,
         "is_expired": is_expired,

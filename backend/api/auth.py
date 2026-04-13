@@ -13,11 +13,6 @@ from backend.models.token import (
     SignupRequest,
     LoginRequest,
     TokenResponse,
-    SignupChallengeRequest,
-    LoginChallengeRequest,
-    SignupVerifyRequest,
-    LoginVerifyRequest,
-    OtpChallengeResponse,
     RegisterRequest,
     MessageResponse,
 )
@@ -28,7 +23,6 @@ from backend.services.auth import (
     create_access_token,
     create_refresh_token,
 )
-from backend.services.otp import create_otp_challenge, verify_otp_challenge, dispatch_otp
 from backend.services.email import send_verification_email, send_welcome_trial_email
 
 security = HTTPBearer()
@@ -92,7 +86,7 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
         hashed_password=hash_password(body.password),
         tier="trial",
         subscription_tier="pro",
-        is_verified=False,
+        is_verified=True,
         trial_started_at=datetime.now(timezone.utc),
         trial_expires_at=datetime.now(timezone.utc) + timedelta(days=60),
         trial_expired=False,
@@ -111,7 +105,7 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
             detail=f"Failed to send verification email: {exc}",
         )
 
-    return MessageResponse(message="Registration successful. Please verify your email.")
+    return MessageResponse(message="Registration successful!")
 
 
 @router.get("/verify-email", response_model=MessageResponse)
@@ -144,73 +138,12 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password.",
         )
-    if not user.is_verified:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Email not verified.",
-        )
 
     token_data = {"sub": user.email, "user_id": user.id}
     return TokenResponse(
         access_token=create_access_token(token_data),
         refresh_token=create_refresh_token(token_data),
     )
-
-
-@router.post("/signup/challenge", response_model=OtpChallengeResponse)
-async def signup_challenge(body: SignupChallengeRequest, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User).where(User.email == body.email))
-    if result.scalar_one_or_none():
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A user with this email already exists.")
-    phone_result = await db.execute(select(User).where(User.phone_number == body.phone_number))
-    if phone_result.scalar_one_or_none():
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A user with this phone number already exists.")
-
-    challenge_id, otp_code = create_otp_challenge("signup", body.email, body.phone_number)
-    dispatch_otp(body.email, body.phone_number, otp_code)
-    return OtpChallengeResponse(challenge_id=challenge_id, message="OTP sent to email and phone.")
-
-
-@router.post("/signup/verify", response_model=TokenResponse)
-async def signup_verify(body: SignupVerifyRequest, db: AsyncSession = Depends(get_db)):
-    if not verify_otp_challenge(
-        challenge_id=body.challenge_id,
-        otp_code=body.otp_code,
-        mode="signup",
-        email=body.email,
-        phone_number=body.phone_number,
-    ):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired OTP.")
-    return await signup(SignupRequest(email=body.email, phone_number=body.phone_number, password=body.password), db)
-
-
-@router.post("/login/challenge", response_model=OtpChallengeResponse)
-async def login_challenge(body: LoginChallengeRequest, db: AsyncSession = Depends(get_db)):
-    user = await authenticate_user(body.email, body.password, db)
-    if user is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password.")
-    if not user.is_verified:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Email not verified.")
-    challenge_id, otp_code = create_otp_challenge("login", body.email, user.phone_number)
-    dispatch_otp(body.email, user.phone_number, otp_code)
-    return OtpChallengeResponse(challenge_id=challenge_id, message="OTP sent to email and phone.")
-
-
-@router.post("/login/verify", response_model=TokenResponse)
-async def login_verify(body: LoginVerifyRequest, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User).where(User.email == body.email))
-    user = result.scalar_one_or_none()
-    if user is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password.")
-    if not verify_otp_challenge(
-        challenge_id=body.challenge_id,
-        otp_code=body.otp_code,
-        mode="login",
-        email=body.email,
-        phone_number=user.phone_number,
-    ):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired OTP.")
-    return await login(LoginRequest(email=body.email, password=body.password), db)
 
 
 async def get_current_user(
@@ -244,9 +177,4 @@ async def get_current_user(
     user = result.scalar_one_or_none()
     if user is None:
         raise credentials_exception
-    if not user.is_verified:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Email not verified.",
-        )
     return user

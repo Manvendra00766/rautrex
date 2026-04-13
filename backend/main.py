@@ -13,7 +13,8 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from backend.models.config import settings
 from backend.models.base import init_engine, create_tables
-from backend.api import auth, protected, data, simulate, strategy, analysis, options, risk, predict, live, payment
+from backend.models import user, portfolio as portfolio_model  # Import all models to register with Base
+from backend.api import auth, protected, data, simulate, strategy, analysis, options, risk, predict, live, payment, portfolio as portfolio_api
 from backend.routers import profile
 from backend.logging_config import setup_logging
 
@@ -46,8 +47,8 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
 # ─── CORS ───
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
+    allow_origins=["http://localhost:3000", "http://localhost:8000", "https://rautrex.vercel.app"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -86,6 +87,7 @@ app.include_router(risk.router, prefix="/api/v1")
 app.include_router(predict.router, prefix="/api/v1")
 app.include_router(payment.router, prefix="/api/v1")
 app.include_router(profile.router, prefix="/api/v1")
+app.include_router(portfolio_api.router, prefix="/api/v1")
 
 
 @app.get("/health")

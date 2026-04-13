@@ -1,8 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { getPortfolioVar } from "../lib/quant";
+import { createPortfolio } from "../lib/api";
 
 const Plot = dynamic<any>(() => import("react-plotly.js"), { ssr: false });
 
@@ -12,9 +14,13 @@ const STOCKS = [
 ];
 
 export default function PortfolioPage() {
+  const router = useRouter();
   const [selected, setSelected] = useState<string[]>(["AAPL", "MSFT", "NVDA", "SPY", "TLT"]);
   const [portfolioVar, setPortfolioVar] = useState(2.27);
   const [loading, setLoading] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
 
   const toggleTicker = (t: string) => {
     setSelected((prev) =>
@@ -56,8 +62,48 @@ export default function PortfolioPage() {
     }
   };
 
+  const handleCreatePortfolio = async () => {
+    if (selected.length < 2) {
+      setError("Select at least 2 assets");
+      return;
+    }
+
+    setCreating(true);
+    setError(null);
+    try {
+      const assets = selected.slice(0, 5).map((ticker, index) => ({
+        ticker,
+        weight: weights[index],
+      }));
+
+      await createPortfolio(assets);
+      setSuccess(true);
+
+      // Redirect to dashboard after 1.5 seconds
+      setTimeout(() => {
+        router.push("/dashboard");
+      }, 1500);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create portfolio");
+    } finally {
+      setCreating(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
+      {success && (
+        <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-4 text-emerald-300 animate-pulse">
+          ✓ Portfolio created successfully! Redirecting to dashboard...
+        </div>
+      )}
+
+      {error && (
+        <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 p-4 text-rose-300">
+          ✗ {error}
+        </div>
+      )}
+
       <h2 className="text-sm text-slate-300">Portfolio Optimization + Rebalancing Recommendations</h2>
 
       <div>
@@ -67,19 +113,33 @@ export default function PortfolioPage() {
             <button
               key={t}
               onClick={() => toggleTicker(t)}
+              disabled={creating}
               className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
                 selected.includes(t)
                   ? "border-cyan-500 bg-cyan-500/20 text-cyan-300"
                   : "border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-500"
-              }`}
+              } ${creating ? "opacity-50 cursor-not-allowed" : ""}`}
             >
               {t}
             </button>
           ))}
         </div>
-        <button onClick={runOptimization} disabled={loading || selected.length < 2} className="mt-4 rounded-md bg-cyan-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-cyan-400 disabled:opacity-50">
-          {loading ? "Optimizing..." : "Run Optimization"}
-        </button>
+        <div className="mt-4 flex gap-3">
+          <button
+            onClick={runOptimization}
+            disabled={loading || creating || selected.length < 2}
+            className="rounded-md bg-cyan-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-cyan-400 disabled:opacity-50"
+          >
+            {loading ? "Optimizing..." : "Run Optimization"}
+          </button>
+          <button
+            onClick={handleCreatePortfolio}
+            disabled={creating || loading || selected.length < 2}
+            className="rounded-md bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-emerald-400 disabled:opacity-50"
+          >
+            {creating ? "Creating..." : "Add to Dashboard"}
+          </button>
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -120,9 +180,15 @@ export default function PortfolioPage() {
           <h3 className="mb-3 text-sm text-slate-300">Optimal Weights</h3>
           <ul className="space-y-2 text-sm text-slate-200 tabular-nums">
             {selected.slice(0, 5).map((s, i) => (
-              <li key={s} className="flex justify-between"><span>{s}</span><span>{((weights[i] || 0) * 100).toFixed(2)}%</span></li>
+              <li key={s} className="flex justify-between">
+                <span>{s}</span>
+                <span>{((weights[i] || 0) * 100).toFixed(2)}%</span>
+              </li>
             ))}
-            <li className="mt-2 flex justify-between border-t border-slate-800 pt-2 text-cyan-300"><span>Portfolio VaR (95%)</span><span>{portfolioVar.toFixed(2)}%</span></li>
+            <li className="mt-2 flex justify-between border-t border-slate-800 pt-2 text-cyan-300">
+              <span>Portfolio VaR (95%)</span>
+              <span>{portfolioVar.toFixed(2)}%</span>
+            </li>
           </ul>
         </div>
       </div>

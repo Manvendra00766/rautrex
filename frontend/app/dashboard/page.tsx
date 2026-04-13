@@ -2,92 +2,248 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
-import { getData, getMetrics, getRiskVar } from "../lib/quant";
+import { checkPortfolio, getPortfolioMetrics, addAssetToPortfolio, optimizePortfolio } from "../lib/api";
+import PortfolioEmptyState from "@/components/PortfolioEmptyState";
 
 const Plot = dynamic<any>(() => import("react-plotly.js"), { ssr: false });
 
-const ohlc = [
-  ["2026-03-24", 122390, 123210, 121880, 122940],
-  ["2026-03-25", 122950, 123480, 122610, 123150],
-  ["2026-03-26", 123140, 123860, 122770, 123590],
-  ["2026-03-27", 123600, 124110, 123200, 123890],
-  ["2026-03-30", 123920, 124780, 123710, 124620],
-  ["2026-03-31", 124610, 125010, 124120, 124430],
-  ["2026-04-01", 124420, 125220, 124000, 124980],
-  ["2026-04-02", 124960, 125870, 124640, 125630],
-  ["2026-04-03", 125640, 126130, 125220, 125450],
-  ["2026-04-06", 125460, 125960, 124990, 125120],
-  ["2026-04-07", 125110, 126020, 124870, 125710],
-  ["2026-04-08", 125690, 126410, 125340, 126180],
-];
+interface Metric {
+  label: string;
+  value: string;
+  delta: string;
+  tone: string;
+}
 
-const benchmark = [
-  { date: "2026-03-24", portfolio: 122940, sp500: 5106.13 },
-  { date: "2026-03-25", portfolio: 123150, sp500: 5128.48 },
-  { date: "2026-03-26", portfolio: 123590, sp500: 5142.26 },
-  { date: "2026-03-27", portfolio: 123890, sp500: 5155.19 },
-  { date: "2026-03-30", portfolio: 124620, sp500: 5178.83 },
-  { date: "2026-03-31", portfolio: 124430, sp500: 5169.46 },
-  { date: "2026-04-01", portfolio: 124980, sp500: 5198.05 },
-  { date: "2026-04-02", portfolio: 125630, sp500: 5217.44 },
-  { date: "2026-04-03", portfolio: 125450, sp500: 5209.68 },
-  { date: "2026-04-06", portfolio: 125120, sp500: 5192.17 },
-  { date: "2026-04-07", portfolio: 125710, sp500: 5221.39 },
-  { date: "2026-04-08", portfolio: 126180, sp500: 5240.64 },
-];
+interface PortfolioData {
+  total_value: number;
+  daily_pnl: number;
+  daily_pnl_pct: number;
+  cumulative_return: number;
+  volatility: number;
+  var_95: number;
+  asset_breakdown: Array<{
+    ticker: string;
+    weight: number;
+    price: number;
+    value: number;
+  }>;
+  portfolio_values: Array<{ date: string; value: number }>;
+  correlation_matrix: Record<string, Record<string, number>>;
+}
 
 export default function DashboardPage() {
-  const [upgraded, setUpgraded] = useState(false);
-  const [portfolioValue, setPortfolioValue] = useState(125430.52);
-  const [dailyPnl, setDailyPnl] = useState(2481.37);
-  const [var95, setVar95] = useState(2847.33);
+  const [portfolioExists, setPortfolioExists] = useState<boolean | null>(null);
+  const [portfolioData, setPortfolioData] = useState<PortfolioData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showAddAssetModal, setShowAddAssetModal] = useState(false);
+  const [addAssetLoading, setAddAssetLoading] = useState(false);
+  const [addAssetError, setAddAssetError] = useState<string | null>(null);
+  const [newTicker, setNewTicker] = useState("");
+  const [newWeight, setNewWeight] = useState("");
+
+  const loadPortfolioData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const check = await checkPortfolio();
+      setPortfolioExists(check.exists);
+
+      if (check.exists) {
+        const metrics = await getPortfolioMetrics();
+        if (metrics.exists) {
+          setPortfolioData(metrics);
+        } else if (metrics.message) {
+          // Portfolio exists but has no assets or error occurred
+          setError(metrics.message || "Portfolio has no assets. Add assets to see metrics.");
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load portfolio:", err);
+      setError(err instanceof Error ? err.message : "Failed to load portfolio");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      setUpgraded(params.get("upgraded") === "true");
-    }
-    const load = async () => {
-      try {
-        const [aaplData, aaplMetrics, varRes] = await Promise.all([
-          getData("AAPL"),
-          getMetrics("AAPL"),
-          getRiskVar({ ticker: "AAPL", method: "historical", confidence: 0.95, holding_period: 1 }),
-        ]);
-        const records = aaplData.records || [];
-        if (records.length >= 2) {
-          const latest = Number(records[records.length - 1].close);
-          const prev = Number(records[records.length - 2].close);
-          const pnl = (latest - prev) * 1200;
-          setDailyPnl(pnl);
-          setPortfolioValue(125000 + latest * 2);
-        }
-        setVar95(varRes.var * portfolioValue);
-        if (aaplMetrics.current_volatility && aaplMetrics.current_volatility > 0.2) {
-          setPortfolioValue((v) => v * 0.998);
-        }
-      } catch {}
-    };
-    load();
+    loadPortfolioData();
   }, []);
 
-  const metrics = useMemo(
-    () => [
-      { label: "Total Portfolio Value", value: `$${portfolioValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, delta: `${((dailyPnl / portfolioValue) * 100).toFixed(2)}% (1D)`, tone: "text-emerald-300" },
-      { label: "Daily P&L", value: `${dailyPnl >= 0 ? "+" : ""}$${Math.abs(dailyPnl).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, delta: "vs benchmark blend", tone: dailyPnl >= 0 ? "text-emerald-300" : "text-rose-300" },
-      { label: "95% VaR (1D)", value: `$${Math.abs(var95).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, delta: `${((var95 / portfolioValue) * 100).toFixed(2)}% capital at risk`, tone: "text-amber-300" },
-      { label: "Active Strategies", value: "4", delta: "2 mean reversion • 2 momentum", tone: "text-cyan-300" },
-    ],
-    [dailyPnl, portfolioValue, var95]
-  );
+  const handleAddAsset = async () => {
+    setAddAssetError(null);
+    setAddAssetLoading(true);
 
+    try {
+      const weight = parseFloat(newWeight);
+      if (!newTicker || !newWeight) {
+        throw new Error("Ticker and weight are required");
+      }
+      if (weight <= 0) {
+        throw new Error("Weight must be positive");
+      }
+
+      await addAssetToPortfolio(newTicker.toUpperCase(), weight);
+      setNewTicker("");
+      setNewWeight("");
+      setShowAddAssetModal(false);
+
+      // Reload portfolio data after adding asset (triggers live update)
+      await loadPortfolioData();
+    } catch (err) {
+      setAddAssetError(err instanceof Error ? err.message : "Failed to add asset");
+    } finally {
+      setAddAssetLoading(false);
+    }
+  };
+
+  const handleOptimize = async () => {
+    setAddAssetLoading(true);
+    setError(null);
+
+    try {
+      await optimizePortfolio();
+      // Reload portfolio data after optimization
+      await loadPortfolioData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to optimize portfolio");
+    } finally {
+      setAddAssetLoading(false);
+    }
+  };
+
+  const metrics: Metric[] = useMemo(() => {
+    if (!portfolioData) return [];
+
+    return [
+      {
+        label: "Total Portfolio Value",
+        value: `$${portfolioData.total_value.toLocaleString(undefined, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })}`,
+        delta: `${portfolioData.daily_pnl_pct.toFixed(2)}% (1D)`,
+        tone: portfolioData.daily_pnl >= 0 ? "text-emerald-300" : "text-rose-300",
+      },
+      {
+        label: "Daily P&L",
+        value: `${portfolioData.daily_pnl >= 0 ? "+" : ""}$${Math.abs(
+          portfolioData.daily_pnl
+        ).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        delta: `${portfolioData.cumulative_return.toFixed(2)}% total return`,
+        tone: portfolioData.daily_pnl >= 0 ? "text-emerald-300" : "text-rose-300",
+      },
+      {
+        label: "Volatility (Annual)",
+        value: `${(portfolioData.volatility * 100).toFixed(2)}%`,
+        delta: `Risk level indicator`,
+        tone: "text-amber-300",
+      },
+      {
+        label: "95% VaR (Daily)",
+        value: `${(portfolioData.var_95 * 100).toFixed(2)}%`,
+        delta: `Maximum daily loss`,
+        tone: "text-rose-300",
+      },
+    ];
+  }, [portfolioData]);
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-slate-400">Loading portfolio...</div>
+      </div>
+    );
+  }
+
+  // Empty state
+  if (!portfolioExists) {
+    return <PortfolioEmptyState onCreatePortfolio={() => (window.location.href = "/portfolio")} />;
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 p-4 text-rose-300">
+          {error}
+        </div>
+        <button
+          onClick={() => setShowAddAssetModal(true)}
+          className="px-4 py-2 rounded-md bg-cyan-500 text-slate-900 font-semibold hover:bg-cyan-400 transition"
+        >
+          Add Asset
+        </button>
+      </div>
+    );
+  }
+
+  // Dashboard with real data
   return (
     <div className="space-y-6">
-      {upgraded && (
-        <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-4 text-emerald-300">
-          Welcome to Pro 🎉 — All features unlocked.
+      {/* Add Asset Modal */}
+      {showAddAssetModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="rounded-xl border border-slate-700 bg-slate-900 p-6 shadow-2xl w-96">
+            <h3 className="mb-4 text-lg font-semibold text-slate-100">Add Asset</h3>
+
+            {addAssetError && (
+              <div className="mb-4 rounded-lg border border-rose-500/40 bg-rose-500/10 p-3 text-sm text-rose-300">
+                {addAssetError}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-300">Ticker</label>
+                <input
+                  type="text"
+                  value={newTicker}
+                  onChange={(e) => setNewTicker(e.target.value.toUpperCase())}
+                  placeholder="AAPL, TSLA, BTC-USD"
+                  className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none ring-cyan-400/60 focus:ring-2"
+                  disabled={addAssetLoading}
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-300">Weight (0-1)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="1"
+                  value={newWeight}
+                  onChange={(e) => setNewWeight(e.target.value)}
+                  placeholder="0.25"
+                  className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none ring-cyan-400/60 focus:ring-2"
+                  disabled={addAssetLoading}
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 flex gap-3">
+              <button
+                onClick={handleAddAsset}
+                disabled={addAssetLoading || !newTicker || !newWeight}
+                className="flex-1 rounded-md bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-emerald-400 disabled:opacity-50"
+              >
+                {addAssetLoading ? "Adding..." : "Add Asset"}
+              </button>
+              <button
+                onClick={() => setShowAddAssetModal(false)}
+                disabled={addAssetLoading}
+                className="flex-1 rounded-md border border-slate-600 bg-slate-800 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-700 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         </div>
       )}
+
+      {/* Metrics Grid */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {metrics.map((item) => (
           <article key={item.label} className="rounded-xl border border-slate-800 bg-slate-900/70 p-5">
@@ -98,54 +254,118 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      <section className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
-        <h2 className="mb-3 text-sm font-medium text-slate-300">Portfolio Candles + Indexed Portfolio/SPX Lines</h2>
-        <Plot
-          data={[
-            {
-              type: "candlestick",
-              x: ohlc.map((d) => d[0]),
-              open: ohlc.map((d) => d[1]),
-              high: ohlc.map((d) => d[2]),
-              low: ohlc.map((d) => d[3]),
-              close: ohlc.map((d) => d[4]),
-              name: "Portfolio OHLC",
-              yaxis: "y1",
-            },
-            {
-              type: "scatter",
-              mode: "lines",
-              x: benchmark.map((d) => d.date),
-              y: benchmark.map((d) => (d.portfolio / benchmark[0].portfolio) * 100),
-              name: "Portfolio Index",
-              line: { color: "#22d3ee", width: 2.2 },
-              yaxis: "y2",
-            },
-            {
-              type: "scatter",
-              mode: "lines",
-              x: benchmark.map((d) => d.date),
-              y: benchmark.map((d) => (d.sp500 / benchmark[0].sp500) * 100),
-              name: "S&P 500 Index",
-              line: { color: "#a78bfa", width: 2.2, dash: "dot" },
-              yaxis: "y2",
-            },
-          ]}
-          layout={{
-            height: 420,
-            paper_bgcolor: "rgba(0,0,0,0)",
-            plot_bgcolor: "rgba(0,0,0,0)",
-            font: { color: "#cbd5e1" },
-            margin: { l: 52, r: 52, t: 12, b: 40 },
-            xaxis: { gridcolor: "#1e293b" },
-            yaxis: { title: "USD", gridcolor: "#1e293b" },
-            yaxis2: { title: "Indexed (Base=100)", overlaying: "y", side: "right", showgrid: false },
-            legend: { orientation: "h", y: 1.08, x: 0 },
-          }}
-          config={{ responsive: true, displayModeBar: false }}
-          style={{ width: "100%" }}
-        />
-      </section>
+      {/* Action Buttons */}
+      <div className="flex gap-2">
+        <button
+          onClick={() => setShowAddAssetModal(true)}
+          className="rounded-md bg-cyan-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-cyan-400 transition"
+        >
+          + Add Asset
+        </button>
+        <button
+          onClick={handleOptimize}
+          disabled={addAssetLoading}
+          className="rounded-md bg-amber-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-amber-400 transition disabled:opacity-50"
+        >
+          Optimize (Equal Weight)
+        </button>
+      </div>
+
+      {/* Charts Grid */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Portfolio Value Over Time */}
+        {portfolioData?.portfolio_values && (
+          <section className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+            <h2 className="mb-3 text-sm font-medium text-slate-300">Portfolio Value Over Time</h2>
+            <Plot
+              data={[
+                {
+                  x: portfolioData.portfolio_values.map((d) => d.date),
+                  y: portfolioData.portfolio_values.map((d) => d.value),
+                  type: "scatter",
+                  mode: "lines",
+                  fill: "tozeroy",
+                  line: { color: "#22d3ee", width: 2 },
+                  fillcolor: "rgba(34, 211, 238, 0.1)",
+                  name: "Portfolio Value",
+                },
+              ]}
+              layout={{
+                height: 360,
+                paper_bgcolor: "rgba(0,0,0,0)",
+                plot_bgcolor: "rgba(0,0,0,0)",
+                font: { color: "#cbd5e1" },
+                margin: { l: 52, r: 20, t: 12, b: 40 },
+                xaxis: { gridcolor: "#1e293b" },
+                yaxis: { title: "USD", gridcolor: "#1e293b" },
+                legend: { x: 0, y: 1 },
+              }}
+              config={{ responsive: true, displayModeBar: false }}
+              style={{ width: "100%" }}
+            />
+          </section>
+        )}
+
+        {/* Asset Allocation */}
+        {portfolioData?.asset_breakdown && (
+          <section className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+            <h2 className="mb-3 text-sm font-medium text-slate-300">Asset Allocation</h2>
+            <Plot
+              data={[
+                {
+                  labels: portfolioData.asset_breakdown.map((a) => a.ticker),
+                  values: portfolioData.asset_breakdown.map((a) => a.weight * 100),
+                  type: "pie",
+                  marker: { colors: ["#22d3ee", "#f59e0b", "#8b5cf6", "#ec4899", "#10b981"] },
+                },
+              ]}
+              layout={{
+                height: 360,
+                paper_bgcolor: "rgba(0,0,0,0)",
+                plot_bgcolor: "rgba(0,0,0,0)",
+                font: { color: "#cbd5e1" },
+                margin: { l: 0, r: 0, t: 12, b: 0 },
+                legend: { orientation: "v", x: 1, y: 0.5 },
+              }}
+              config={{ responsive: true, displayModeBar: false }}
+              style={{ width: "100%" }}
+            />
+          </section>
+        )}
+      </div>
+
+      {/* Asset Breakdown Table */}
+      {portfolioData?.asset_breakdown && (
+        <section className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/70">
+          <table className="min-w-full text-sm">
+            <thead className="bg-slate-800 text-slate-300">
+              <tr>
+                <th className="px-4 py-3 text-left">Ticker</th>
+                <th className="px-4 py-3 text-right">Weight</th>
+                <th className="px-4 py-3 text-right">Price</th>
+                <th className="px-4 py-3 text-right">Value</th>
+              </tr>
+            </thead>
+            <tbody className="text-slate-200">
+              {portfolioData.asset_breakdown.map((asset) => (
+                <tr key={asset.ticker} className="border-t border-slate-800">
+                  <td className="px-4 py-2 font-medium">{asset.ticker}</td>
+                  <td className="px-4 py-2 text-right">{(asset.weight * 100).toFixed(2)}%</td>
+                  <td className="px-4 py-2 text-right tabular-nums">
+                    ${asset.price.toFixed(2)}
+                  </td>
+                  <td className="px-4 py-2 text-right tabular-nums text-emerald-300">
+                    ${asset.value.toLocaleString(undefined, {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
     </div>
   );
 }

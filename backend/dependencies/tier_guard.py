@@ -26,7 +26,10 @@ _bearer_optional = HTTPBearer(auto_error=False)
 def require_pro(user: User = Depends(get_current_user)) -> User:
     effective = get_effective_tier(user)
     if effective not in ["pro", "team"]:
-        is_expired_trial = user.tier == "trial" and datetime.now(timezone.utc) > user.trial_expires_at
+        trial_expires = user.trial_expires_at
+        if trial_expires.tzinfo is None:
+            trial_expires = trial_expires.replace(tzinfo=timezone.utc)
+        is_expired_trial = user.tier == "trial" and datetime.now(timezone.utc) > trial_expires
         raise HTTPException(
             status_code=403,
             detail={
@@ -46,7 +49,10 @@ def require_team(user: User = Depends(get_current_user)) -> User:
 
 def get_effective_tier(user: User) -> str:
     if user.tier == "trial":
-        if datetime.now(timezone.utc) < user.trial_expires_at:
+        trial_expires = user.trial_expires_at
+        if trial_expires.tzinfo is None:
+            trial_expires = trial_expires.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) < trial_expires:
             return "pro"
         return "free"
     return user.tier
