@@ -100,13 +100,15 @@ def calculate_cumulative_returns(returns: np.ndarray) -> float:
 
 def calculate_portfolio_metrics(
     assets: list[dict],
+    portfolio_created_at: datetime = None,
     period: str = "1y"
 ) -> dict:
     """Calculate comprehensive portfolio metrics from real market data.
     
     Args:
         assets: List of {ticker, amount_invested} dicts
-        period: Historical period for calculations
+        portfolio_created_at: Portfolio creation timestamp (uses this as start date if provided)
+        period: Historical period for calculations (fallback if no creation date)
         
     Returns:
         dict: {
@@ -139,7 +141,29 @@ def calculate_portfolio_metrics(
         weight = amount / total_invested  # Calculate weight from amount
         
         try:
-            prices = fetch_price_data(ticker, period)
+            # If portfolio_created_at provided, fetch from that date to today
+            # Otherwise use the specified period
+            if portfolio_created_at:
+                try:
+                    prices = yf.download(
+                        ticker,
+                        start=portfolio_created_at.date(),
+                        end=None,  # Today
+                        progress=False,
+                        auto_adjust=True
+                    )["Close"]
+                    if isinstance(prices, pd.DataFrame):
+                        prices = prices.iloc[:, 0] if len(prices.columns) > 0 else prices.squeeze()
+                    if isinstance(prices, (int, float)):
+                        raise ValueError(f"Insufficient data for {ticker}")
+                    if len(prices) < 1:
+                        raise ValueError(f"No data available from portfolio creation date for {ticker}")
+                except Exception as e:
+                    logger.warning(f"Failed to fetch from creation date for {ticker}, falling back to period: {e}")
+                    prices = fetch_price_data(ticker, period)
+            else:
+                prices = fetch_price_data(ticker, period)
+            
             price_data[ticker] = prices
             weights[ticker] = weight
             amounts[ticker] = amount

@@ -143,7 +143,10 @@ async def get_portfolio_metrics(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get portfolio metrics calculated from real market data."""
+    """Get portfolio metrics calculated from real market data.
+    
+    Calculates performance from portfolio creation date to today.
+    """
     try:
         result = await db.execute(
             select(Portfolio).where(Portfolio.user_id == current_user.id)
@@ -166,8 +169,8 @@ async def get_portfolio_metrics(
         
         logger.info(f"Calculating metrics for user {current_user.id} with assets: {portfolio.assets}")
         
-        # Calculate metrics from real market data
-        metrics = calculate_portfolio_metrics(portfolio.assets)
+        # Calculate metrics from real market data, starting from portfolio creation date
+        metrics = calculate_portfolio_metrics(portfolio.assets, portfolio_created_at=portfolio.created_at)
         
         # Update total_value in database
         portfolio.total_value = metrics["total_value"]
@@ -256,8 +259,8 @@ async def add_asset(
     await db.commit()
     
     try:
-        # Recalculate metrics with updated portfolio
-        metrics = calculate_portfolio_metrics(portfolio.assets)
+        # Recalculate metrics with updated portfolio, from creation date
+        metrics = calculate_portfolio_metrics(portfolio.assets, portfolio_created_at=portfolio.created_at)
         portfolio.total_value = metrics["total_value"]
         db.add(portfolio)
         await db.commit()
@@ -331,8 +334,8 @@ async def optimize_portfolio(
         
         logger.info(f"Optimized portfolio for user {current_user.id}: equal amounts ${equal_amount:.2f} each")
         
-        # Recalculate metrics
-        metrics = calculate_portfolio_metrics(portfolio.assets)
+        # Recalculate metrics from portfolio creation date
+        metrics = calculate_portfolio_metrics(portfolio.assets, portfolio_created_at=portfolio.created_at)
         portfolio.total_value = metrics["total_value"]
         db.add(portfolio)
         await db.commit()
@@ -400,8 +403,8 @@ async def remove_asset(
     logger.info(f"Removed asset {ticker} from user {current_user.id}")
     
     try:
-        # Recalculate metrics
-        metrics = calculate_portfolio_metrics(portfolio.assets)
+        # Recalculate metrics from portfolio creation date
+        metrics = calculate_portfolio_metrics(portfolio.assets, portfolio_created_at=portfolio.created_at)
         portfolio.total_value = metrics["total_value"]
         db.add(portfolio)
         await db.commit()

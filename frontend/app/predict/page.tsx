@@ -3,8 +3,6 @@
 import { useEffect, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LineChart, Line } from "recharts";
 import { getData, getPredictSignal, trainPredictModel } from "../lib/quant";
-import LockedFeature from "../../components/LockedFeature";
-import { getMyProfile } from "../../lib/api/profile";
 
 export default function PredictPage() {
   const [ticker, setTicker] = useState("AAPL");
@@ -23,19 +21,6 @@ export default function PredictPage() {
   const [probability, setProbability] = useState(68.4);
   const [expectedReturn, setExpectedReturn] = useState(0.72);
   const [loading, setLoading] = useState(false);
-  const [isPro, setIsPro] = useState(false);
-
-  useEffect(() => {
-    const loadTier = async () => {
-      try {
-        const me = await getMyProfile();
-        setIsPro(me.tier === "pro" || me.tier === "team");
-      } catch {
-        setIsPro(false);
-      }
-    };
-    loadTier();
-  }, []);
 
   const [predVsActual, setPredVsActual] = useState([
     { d: "2026-03-28", pred: 0.42, actual: 0.36 },
@@ -116,11 +101,6 @@ export default function PredictPage() {
         ))}
       </div>
 
-      <LockedFeature
-        locked={!isPro}
-        title="ML Signals are Pro-only"
-        message="Upgrade to Pro to unlock unlimited model runs and signal diagnostics."
-      >
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
           <h3 className="mb-3 text-sm text-slate-300">Feature Importance</h3>
@@ -153,7 +133,6 @@ export default function PredictPage() {
           </ResponsiveContainer>
         </section>
       </div>
-      </LockedFeature>
     </div>
   );
 }
