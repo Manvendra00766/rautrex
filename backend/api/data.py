@@ -40,10 +40,24 @@ def fetch_ticker(
             db_url=DEFAULT_DB_URL,
         )
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Data ingestion failed: {exc}")
+        # Return graceful error response instead of raising
+        return {
+            "success": False,
+            "ticker": ticker,
+            "error": "Failed to fetch data",
+            "details": str(exc),
+            "records": [],
+            "count": 0,
+        }
 
     if df.empty:
-        return {"ticker": ticker, "records": [], "message": "No data found"}
+        return {
+            "success": True,
+            "ticker": ticker,
+            "records": [],
+            "count": 0,
+            "message": "No data found for this ticker",
+        }
 
     def _clean_value(value):
         try:
@@ -55,6 +69,7 @@ def fetch_ticker(
 
     records = [{k: _clean_value(v) for k, v in row.items()} for row in df.to_dict(orient="records")]
     return {
+        "success": True,
         "ticker": ticker,
         "records": records,
         "count": len(records),

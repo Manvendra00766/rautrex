@@ -57,6 +57,10 @@ export default function DashboardPage() {
         const metrics = await getPortfolioMetrics();
         if (metrics.exists) {
           setPortfolioData(metrics);
+          // Check if there's an error message (insufficient data, failure, etc)
+          if (metrics.message && !metrics.has_sufficient_data) {
+            setError(metrics.message);
+          }
         } else if (metrics.message) {
           // Portfolio exists but has no assets or error occurred
           setError(metrics.message || "Portfolio has no assets. Add assets to see metrics.");
@@ -291,8 +295,8 @@ export default function DashboardPage() {
 
       {/* Charts Grid */}
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* Portfolio Value Over Time */}
-        {portfolioData?.portfolio_values && (
+        {/* Portfolio Value Over Time - Only show if sufficient data */}
+        {portfolioData?.has_sufficient_data !== false && portfolioData?.portfolio_values && portfolioData.portfolio_values.length > 0 ? (
           <section className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
             <h2 className="mb-3 text-sm font-medium text-slate-300">Portfolio Value Over Time</h2>
             <Plot
@@ -322,10 +326,20 @@ export default function DashboardPage() {
               style={{ width: "100%" }}
             />
           </section>
-        )}
+        ) : error ? (
+          <section className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+            <h2 className="mb-3 text-sm font-medium text-slate-300">Portfolio Value Over Time</h2>
+            <div className="flex h-[360px] items-center justify-center rounded-lg border border-dashed border-slate-600 bg-slate-950/50">
+              <div className="text-center">
+                <p className="text-sm text-slate-400">{error}</p>
+                <p className="mt-2 text-xs text-slate-500">Graph will appear once you have more historical data</p>
+              </div>
+            </div>
+          </section>
+        ) : null}
 
         {/* Asset Allocation */}
-        {portfolioData?.asset_breakdown && (
+        {portfolioData?.asset_breakdown && portfolioData.asset_breakdown.length > 0 ? (
           <section className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
             <h2 className="mb-3 text-sm font-medium text-slate-300">Asset Allocation</h2>
             <Plot
@@ -349,7 +363,7 @@ export default function DashboardPage() {
               style={{ width: "100%" }}
             />
           </section>
-        )}
+        ) : null}
       </div>
 
       {/* Asset Breakdown Table */}

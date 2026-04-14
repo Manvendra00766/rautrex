@@ -46,6 +46,8 @@ class PortfolioCheckResponse(BaseModel):
 
 class PortfolioMetricsResponse(BaseModel):
     exists: bool
+    success: bool | None = None
+    has_sufficient_data: bool | None = None
     message: str | None = None
     total_invested: float | None = None
     total_value: float | None = None
@@ -146,6 +148,7 @@ async def get_portfolio_metrics(
     """Get portfolio metrics calculated from real market data.
     
     Calculates performance from portfolio creation date to today.
+    Returns gracefully if insufficient data (< 10 trading days).
     """
     try:
         result = await db.execute(
@@ -180,21 +183,50 @@ async def get_portfolio_metrics(
         
         logger.info(f"Successfully calculated metrics for user {current_user.id}")
         
+        # Merge metrics into response (includes success and has_sufficient_data flags)
         return PortfolioMetricsResponse(
             exists=True,
             **metrics
         )
     except ValueError as e:
-        logger.error(f"ValueError in get_portfolio_metrics: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
+        # Validation errors - return safe response
+        logger.warning(f"ValueError in get_portfolio_metrics: {str(e)}")
+        return PortfolioMetricsResponse(
+            exists=True,
+            success=False,
+            has_sufficient_data=False,
+            message=f"Unable to calculate metrics: {str(e)}",
+            total_invested=0.0,
+            total_value=0.0,
+            daily_pnl=0.0,
+            daily_pnl_pct=0.0,
+            cumulative_return=0.0,
+            volatility=0.0,
+            var_95=0.0,
+            asset_breakdown=[],
+            price_series={},
+            portfolio_values=[],
+            correlation_matrix={},
         )
     except Exception as e:
+        # Unhandled errors - return graceful fallback
         logger.error(f"Exception in get_portfolio_metrics: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to calculate portfolio metrics: {str(e)}",
+        return PortfolioMetricsResponse(
+            exists=True,
+            success=False,
+            has_sufficient_data=False,
+            message=f"Failed to calculate portfolio metrics. Please try again later.",
+            total_invested=0.0,
+            total_value=0.0,
+            daily_pnl=0.0,
+            daily_pnl_pct=0.0,
+            cumulative_return=0.0,
+            volatility=0.0,
+            var_95=0.0,
+            asset_breakdown=[],
+            price_series={},
+            portfolio_values=[],
+            correlation_matrix={},
         )
 
 
@@ -272,16 +304,44 @@ async def add_asset(
             **metrics
         )
     except ValueError as e:
-        logger.error(f"ValueError calculating metrics: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
+        logger.warning(f"ValueError calculating metrics after add-asset: {str(e)}")
+        # Return graceful response even if metric calculation fails
+        return PortfolioMetricsResponse(
+            exists=True,
+            success=False,
+            has_sufficient_data=False,
+            message=f"Asset added but metrics calculation failed: {str(e)}",
+            total_invested=float(total_invested),
+            total_value=float(total_invested),
+            daily_pnl=0.0,
+            daily_pnl_pct=0.0,
+            cumulative_return=0.0,
+            volatility=0.0,
+            var_95=0.0,
+            asset_breakdown=[],
+            price_series={},
+            portfolio_values=[],
+            correlation_matrix={},
         )
     except Exception as e:
         logger.error(f"Exception calculating metrics: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to add asset: {str(e)}",
+        # Return graceful response even if metric calculation fails
+        return PortfolioMetricsResponse(
+            exists=True,
+            success=False,
+            has_sufficient_data=False,
+            message=f"Asset added but unable to calculate metrics. Please try again.",
+            total_invested=float(total_invested),
+            total_value=float(total_invested),
+            daily_pnl=0.0,
+            daily_pnl_pct=0.0,
+            cumulative_return=0.0,
+            volatility=0.0,
+            var_95=0.0,
+            asset_breakdown=[],
+            price_series={},
+            portfolio_values=[],
+            correlation_matrix={},
         )
 
 
@@ -345,16 +405,42 @@ async def optimize_portfolio(
             **metrics
         )
     except ValueError as e:
-        logger.error(f"ValueError optimizing: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
+        logger.warning(f"ValueError optimizing: {str(e)}")
+        return PortfolioMetricsResponse(
+            exists=True,
+            success=False,
+            has_sufficient_data=False,
+            message=f"Portfolio rebalanced but metrics calculation failed: {str(e)}",
+            total_invested=float(portfolio.total_invested or 0),
+            total_value=float(portfolio.total_invested or 0),
+            daily_pnl=0.0,
+            daily_pnl_pct=0.0,
+            cumulative_return=0.0,
+            volatility=0.0,
+            var_95=0.0,
+            asset_breakdown=[],
+            price_series={},
+            portfolio_values=[],
+            correlation_matrix={},
         )
     except Exception as e:
         logger.error(f"Exception optimizing: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to optimize portfolio: {str(e)}",
+        return PortfolioMetricsResponse(
+            exists=True,
+            success=False,
+            has_sufficient_data=False,
+            message=f"Unable to rebalance portfolio. Please try again.",
+            total_invested=float(portfolio.total_invested or 0),
+            total_value=float(portfolio.total_invested or 0),
+            daily_pnl=0.0,
+            daily_pnl_pct=0.0,
+            cumulative_return=0.0,
+            volatility=0.0,
+            var_95=0.0,
+            asset_breakdown=[],
+            price_series={},
+            portfolio_values=[],
+            correlation_matrix={},
         )
 
 
@@ -414,14 +500,40 @@ async def remove_asset(
             **metrics
         )
     except ValueError as e:
-        logger.error(f"ValueError calculating metrics after removal: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
+        logger.warning(f"ValueError calculating metrics after removal: {str(e)}")
+        return PortfolioMetricsResponse(
+            exists=True,
+            success=False,
+            has_sufficient_data=False,
+            message=f"Asset removed but metrics calculation failed: {str(e)}",
+            total_invested=float(total_invested),
+            total_value=float(total_invested),
+            daily_pnl=0.0,
+            daily_pnl_pct=0.0,
+            cumulative_return=0.0,
+            volatility=0.0,
+            var_95=0.0,
+            asset_breakdown=[],
+            price_series={},
+            portfolio_values=[],
+            correlation_matrix={},
         )
     except Exception as e:
         logger.error(f"Exception calculating metrics after removal: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to remove asset: {str(e)}",
+        return PortfolioMetricsResponse(
+            exists=True,
+            success=False,
+            has_sufficient_data=False,
+            message=f"Asset removed but unable to calculate metrics. Please try again.",
+            total_invested=float(total_invested),
+            total_value=float(total_invested),
+            daily_pnl=0.0,
+            daily_pnl_pct=0.0,
+            cumulative_return=0.0,
+            volatility=0.0,
+            var_95=0.0,
+            asset_breakdown=[],
+            price_series={},
+            portfolio_values=[],
+            correlation_matrix={},
         )

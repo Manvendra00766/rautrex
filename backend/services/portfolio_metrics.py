@@ -181,8 +181,38 @@ def calculate_portfolio_metrics(
     
     df_prices.dropna(inplace=True)
     
-    if df_prices.empty or len(df_prices) < 10:
-        raise ValueError("Insufficient valid price data available (need at least 10 trading days)")
+    # Check if we have sufficient data for graph rendering
+    has_sufficient_data = not (df_prices.empty or len(df_prices) < 10)
+    
+    if not has_sufficient_data:
+        # Return partial response with basic stats but no graph
+        logger.warning(f"Insufficient data for portfolio: {len(df_prices) if not df_prices.empty else 0} days available")
+        return {
+            "success": True,
+            "has_sufficient_data": False,
+            "message": f"Minimum 10 trading days required for performance graph. Currently have {len(df_prices) if not df_prices.empty else 0} days.",
+            "total_invested": float(total_invested),
+            "total_value": float(total_invested),  # No change yet
+            "daily_pnl": 0.0,
+            "daily_pnl_pct": 0.0,
+            "cumulative_return": 0.0,
+            "volatility": 0.0,
+            "var_95": 0.0,
+            "asset_breakdown": [
+                {
+                    "ticker": ticker,
+                    "amount_invested": float(amount),
+                    "weight": float(amount / total_invested),
+                    "price": 0.0,
+                    "quantity": 0.0,
+                    "value": float(amount),
+                }
+                for ticker, amount in amounts.items()
+            ],
+            "price_series": {},
+            "portfolio_values": [],
+            "correlation_matrix": {},
+        }
     
     # Calculate returns for each asset
     returns_data = {}
@@ -244,6 +274,8 @@ def calculate_portfolio_metrics(
     correlation_matrix = correlation_returns.corr().to_dict()
     
     return {
+        "success": True,
+        "has_sufficient_data": True,
         "total_invested": float(total_invested),
         "total_value": float(current_value),
         "daily_pnl": float(daily_pnl),
