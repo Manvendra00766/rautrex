@@ -9,10 +9,8 @@ from backend.models.user import User
 from backend.models.config import settings
 
 
-# CryptContext centralizes password hashing config in one place.
-# Using bcrypt (schemes=["bcrypt"]) — it's battle-tested and FastAPI ecosystem standard.
-# deprecated="auto" handles migration if we switch algorithms later.
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# CryptContext with argon2 — more secure than bcrypt, no byte limits, supports Python 3.14+
+pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -21,13 +19,11 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 def hash_password(password: str) -> str:
-    """Hash a password with bcrypt. Includes a random salt internally.
+    """Hash a password with Argon2.
     
-    Truncates to 72 bytes (bcrypt limit) to handle UTF-8 multi-byte characters.
+    Argon2 is more secure than bcrypt and has no byte length limits.
     """
-    pwd_bytes = password.encode('utf-8')[:72]
-    pwd_str = pwd_bytes.decode('utf-8', errors='ignore')
-    return pwd_context.hash(pwd_str)
+    return pwd_context.hash(password)
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
