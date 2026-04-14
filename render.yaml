@@ -2,6 +2,7 @@ services:
   - type: web
     name: rautrex-backend
     env: python
+    pythonVersion: 3.11
     plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
@@ -10,6 +11,8 @@ services:
       - key: DATABASE_URL
         sync: false
       - key: SECRET_KEY
+        sync: false
+      - key: CORS_ORIGINS
         sync: false
       - key: FRONTEND_URL
         value: https://your-frontend-domain.vercel.app
