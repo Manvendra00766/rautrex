@@ -53,3 +53,21 @@ async def create_tables():
     """Create all tables defined by ORM models. Idempotent — safe to call multiple times."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Run migrations for schema updates
+        await _migrate_schema(conn)
+
+
+async def _migrate_schema(conn):
+    """Apply schema migrations for existing tables."""
+    # Add total_invested and total_value columns to portfolios if they don't exist
+    try:
+        await conn.exec_driver_sql(
+            """
+            ALTER TABLE portfolios
+            ADD COLUMN IF NOT EXISTS total_invested FLOAT,
+            ADD COLUMN IF NOT EXISTS total_value FLOAT;
+            """
+        )
+    except Exception:
+        # Column may already exist or table doesn't exist yet - this is fine
+        pass
