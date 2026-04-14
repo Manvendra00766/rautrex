@@ -31,10 +31,6 @@ export default function SimulatePage() {
   const runSimulation = async () => {
     setLoading(true);
     try {
-      if (runCount >= 2) {
-        setLimitMessage("You've used 2/2 free simulations today.");
-        return;
-      }
       const response = await runGBM(params);
       if (response.paths_sample?.length) {
         setPaths(response.paths_sample.slice(0, 4).map((p) => {
@@ -87,7 +83,6 @@ export default function SimulatePage() {
       <button onClick={runSimulation} disabled={loading} className="rounded-md bg-cyan-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-cyan-400 disabled:opacity-50">
         {loading ? "Running..." : "Run GBM"}
       </button>
-      {limitMessage && <p className="text-sm text-amber-300">{limitMessage}</p>}
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4 lg:col-span-2">

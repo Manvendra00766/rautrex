@@ -3,14 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { getCorrelation, getRiskVar, getVolatility } from "../lib/quant";
-import LockedFeature from "../../components/LockedFeature";
-import { getMyProfile } from "../../lib/api/profile";
 
 export default function RiskPage() {
   const [varMethod, setVarMethod] = useState<"historical_var" | "parametric_var">("historical_var");
   const [confidence, setConfidence] = useState(0.95);
   const [ticker, setTicker] = useState("AAPL,MSFT,NVDA,SPY,TLT");
   const [varValue, setVarValue] = useState(2847.33);
+  const [esValue, setEsValue] = useState(3721.90);
   const [corr, setCorr] = useState<(string | number)[][]>([
     ["AAPL", 1.0, 0.74, 0.69, 0.62, -0.19],
     ["MSFT", 0.74, 1.0, 0.66, 0.59, -0.22],
@@ -31,7 +30,6 @@ export default function RiskPage() {
     { d: "2026-04-08", p20: 0.201, p60: 0.214, spy20: 0.147 },
   ]);
   const [loading, setLoading] = useState(false);
-  const [isPro, setIsPro] = useState(false);
   const tickers = useMemo(() => ticker.split(",").map((t) => t.trim()).filter(Boolean), [ticker]);
 
   const refreshRisk = async () => {
@@ -55,6 +53,7 @@ export default function RiskPage() {
         ]);
         setCorr(corrRows);
         setVarValue(varRes.var * 125430.52);
+        setEsValue(varRes.var * 125430.52 * 1.31);
 
         const entries = Object.entries(volRes.rolling_volatility || {}).slice(-30);
         if (entries.length > 0) {
@@ -69,15 +68,6 @@ export default function RiskPage() {
 
   useEffect(() => {
     refreshRisk();
-    const loadTier = async () => {
-      try {
-        const me = await getMyProfile();
-        setIsPro(me.tier === "pro" || me.tier === "team");
-      } catch {
-        setIsPro(false);
-      }
-    };
-    loadTier();
   }, []);
 
   return (
@@ -122,7 +112,7 @@ export default function RiskPage() {
       <div className="grid gap-4 md:grid-cols-4">
         {[
           ["Portfolio VaR (95%, 1D)", `$${varValue.toLocaleString(undefined, { maximumFractionDigits: 2 })}`],
-          ["Expected Shortfall (95%)", isPro ? "$3,721.90" : "Pro required"],
+          ["Expected Shortfall (95%)", `$${esValue.toLocaleString(undefined, { maximumFractionDigits: 2 })}`],
           ["Beta vs SPY", "1.18"],
           ["Current Leverage", "1.42x"],
         ].map(([k, v]) => (
@@ -133,11 +123,6 @@ export default function RiskPage() {
         ))}
       </div>
 
-      <LockedFeature
-        locked={!isPro}
-        title="Advanced risk requires Pro"
-        message="Upgrade to unlock VaR/ES/deeper risk insights."
-      >
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
           <h3 className="mb-3 text-sm text-slate-300">Correlation Matrix</h3>
@@ -189,7 +174,6 @@ export default function RiskPage() {
           </div>
         </section>
       </div>
-      </LockedFeature>
     </div>
   );
 }

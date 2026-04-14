@@ -16,8 +16,6 @@ import {
   Wallet,
 } from "lucide-react";
 import { logout } from "../app/lib/auth";
-import TrialBanner from "./TrialBanner";
-import TrialExpiredModal from "./TrialExpiredModal";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -110,9 +108,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           </div>
         </header>
         <section className="flex-1 overflow-y-auto p-6">
-          <TrialBanner />
           {children}
-          <TrialExpiredModal />
         </section>
       </main>
     </div>
