@@ -190,17 +190,23 @@ export async function getPortfolioMetrics() {
   });
 }
 
-export async function createPortfolio(assets: Array<{ ticker: string; weight: number }>) {
+export async function createPortfolio(assets: Array<{ ticker: string; amount_invested: number }>) {
   return fetchWithAuth("/portfolio", {
     method: "POST",
     body: JSON.stringify({ assets }),
   });
 }
 
-export async function addAssetToPortfolio(ticker: string, weight: number) {
+export async function addAssetToPortfolio(ticker: string, amount_invested: number) {
   return fetchWithAuth("/portfolio/add-asset", {
     method: "POST",
-    body: JSON.stringify({ ticker, weight }),
+    body: JSON.stringify({ ticker, amount_invested }),
+  });
+}
+
+export async function removeAssetFromPortfolio(ticker: string) {
+  return fetchWithAuth(`/portfolio/remove-asset/${ticker}`, {
+    method: "DELETE",
   });
 }
 

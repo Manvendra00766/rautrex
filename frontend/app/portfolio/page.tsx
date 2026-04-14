@@ -16,6 +16,13 @@ const STOCKS = [
 export default function PortfolioPage() {
   const router = useRouter();
   const [selected, setSelected] = useState<string[]>(["AAPL", "MSFT", "NVDA", "SPY", "TLT"]);
+  const [amounts, setAmounts] = useState<Record<string, number>>({
+    AAPL: 20000,
+    MSFT: 20000,
+    NVDA: 10000,
+    SPY: 0,
+    TLT: 0,
+  });
   const [portfolioVar, setPortfolioVar] = useState(2.27);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -26,7 +33,22 @@ export default function PortfolioPage() {
     setSelected((prev) =>
       prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]
     );
+    // Initialize amount if not exists
+    if (!amounts[t]) {
+      setAmounts(prev => ({ ...prev, [t]: 0 }));
+    }
   };
+
+  const totalInvested = Object.values(amounts).reduce((a, b) => a + b, 0);
+
+  const weights = useMemo(() => {
+    if (totalInvested === 0) return {};
+    const w: Record<string, number> = {};
+    selected.forEach(ticker => {
+      w[ticker] = (amounts[ticker] || 0) / totalInvested;
+    });
+    return w;
+  }, [selected, amounts, totalInvested]);
 
   const frontier = [
     { vol: 8.7, ret: 5.3 },
@@ -40,20 +62,13 @@ export default function PortfolioPage() {
     { vol: 21.1, ret: 12.7 },
   ];
 
-  const weights = useMemo(() => {
-    const base = selected.slice(0, 5);
-    if (base.length === 0) return [];
-    const w = 1 / base.length;
-    return base.map(() => Number(w.toFixed(4)));
-  }, [selected]);
-
   const runOptimization = async () => {
     if (selected.length < 2) return;
     setLoading(true);
     try {
       const response = await getPortfolioVar({
         tickers: selected.slice(0, 5),
-        weights,
+        weights: selected.slice(0, 5).map(t => weights[t] || 0),
         confidence: 0.95,
       });
       setPortfolioVar(response.var * 100);
@@ -63,18 +78,24 @@ export default function PortfolioPage() {
   };
 
   const handleCreatePortfolio = async () => {
-    if (selected.length < 2) {
-      setError("Select at least 2 assets");
+    if (totalInvested === 0) {
+      setError("Enter investment amounts for at least 2 assets");
       return;
     }
 
     setCreating(true);
     setError(null);
     try {
-      const assets = selected.slice(0, 5).map((ticker, index) => ({
-        ticker,
-        weight: weights[index],
-      }));
+      const assets = selected
+        .filter(ticker => (amounts[ticker] || 0) > 0)
+        .map(ticker => ({
+          ticker,
+          amount_invested: amounts[ticker],
+        }));
+
+      if (assets.length < 2) {
+        throw new Error("Invest in at least 2 assets");
+      }
 
       await createPortfolio(assets);
       setSuccess(true);
@@ -104,42 +125,70 @@ export default function PortfolioPage() {
         </div>
       )}
 
-      <h2 className="text-sm text-slate-300">Portfolio Optimization + Rebalancing Recommendations</h2>
+      <h2 className="text-sm text-slate-300">Build Your Portfolio - Enter Investment Amounts</h2>
 
-      <div>
-        <p className="mb-3 text-sm text-slate-400">Asset Universe</p>
-        <div className="flex flex-wrap gap-2">
-          {STOCKS.map((t) => (
-            <button
-              key={t}
-              onClick={() => toggleTicker(t)}
-              disabled={creating}
-              className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
-                selected.includes(t)
-                  ? "border-cyan-500 bg-cyan-500/20 text-cyan-300"
-                  : "border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-500"
-              } ${creating ? "opacity-50 cursor-not-allowed" : ""}`}
-            >
-              {t}
-            </button>
+      <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-6 space-y-4">
+        <p className="text-sm text-slate-400">Select assets and enter your investment amount for each</p>
+        
+        <div className="space-y-3">
+          {selected.map((ticker) => (
+            <div key={ticker} className="flex items-center gap-4">
+              <span className="w-12 font-medium text-slate-300">{ticker}</span>
+              <input
+                type="number"
+                min="0"
+                step="1000"
+                value={amounts[ticker] || 0}
+                onChange={(e) => setAmounts(prev => ({ ...prev, [ticker]: parseFloat(e.target.value) || 0 }))}
+                placeholder="0"
+                disabled={creating}
+                className="flex-1 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 outline-none ring-cyan-400/60 focus:ring-2"
+              />
+              <span className="w-24 text-right text-sm text-slate-400">
+                ${(amounts[ticker] || 0).toLocaleString()}
+              </span>
+              <button
+                onClick={() => toggleTicker(ticker)}
+                disabled={creating}
+                className="px-2 py-1 text-xs rounded bg-slate-800 hover:bg-slate-700 text-slate-300"
+              >
+                Remove
+              </button>
+            </div>
           ))}
         </div>
-        <div className="mt-4 flex gap-3">
-          <button
-            onClick={runOptimization}
-            disabled={loading || creating || selected.length < 2}
-            className="rounded-md bg-cyan-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-cyan-400 disabled:opacity-50"
-          >
-            {loading ? "Optimizing..." : "Run Optimization"}
-          </button>
-          <button
-            onClick={handleCreatePortfolio}
-            disabled={creating || loading || selected.length < 2}
-            className="rounded-md bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-emerald-400 disabled:opacity-50"
-          >
-            {creating ? "Creating..." : "Add to Dashboard"}
-          </button>
+
+        <div className="pt-4 border-t border-slate-700">
+          <p className="text-sm text-slate-400 mb-2">Add more assets:</p>
+          <div className="flex flex-wrap gap-2">
+            {STOCKS.filter(t => !selected.includes(t)).map((t) => (
+              <button
+                key={t}
+                onClick={() => toggleTicker(t)}
+                disabled={creating}
+                className="rounded-full border border-slate-700 bg-slate-900 hover:border-cyan-500 hover:bg-cyan-500/10 px-3 py-1.5 text-xs text-slate-300 transition-colors"
+              >
+                + {t}
+              </button>
+            ))}
+          </div>
         </div>
+
+        <div className="pt-4 border-t border-slate-700">
+          <div className="text-lg font-semibold text-slate-100">
+            Total Investment: ${totalInvested.toLocaleString()}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex gap-3">
+        <button
+          onClick={handleCreatePortfolio}
+          disabled={creating || loading || totalInvested === 0}
+          className="rounded-md bg-emerald-500 px-6 py-2 text-sm font-medium text-slate-950 hover:bg-emerald-400 disabled:opacity-50"
+        >
+          {creating ? "Creating..." : "Create Portfolio"}
+        </button>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -177,52 +226,25 @@ export default function PortfolioPage() {
           />
         </div>
         <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
-          <h3 className="mb-3 text-sm text-slate-300">Optimal Weights</h3>
+          <h3 className="mb-3 text-sm text-slate-300">Portfolio Weights</h3>
           <ul className="space-y-2 text-sm text-slate-200 tabular-nums">
-            {selected.slice(0, 5).map((s, i) => (
+            {selected.filter(s => (amounts[s] || 0) > 0).map((s) => (
               <li key={s} className="flex justify-between">
                 <span>{s}</span>
-                <span>{((weights[i] || 0) * 100).toFixed(2)}%</span>
+                <span>{((weights[s] || 0) * 100).toFixed(2)}%</span>
               </li>
             ))}
-            <li className="mt-2 flex justify-between border-t border-slate-800 pt-2 text-cyan-300">
-              <span>Portfolio VaR (95%)</span>
-              <span>{portfolioVar.toFixed(2)}%</span>
-            </li>
+            {selected.filter(s => (amounts[s] || 0) > 0).length > 0 && (
+              <>
+                <li className="mt-2 flex justify-between border-t border-slate-800 pt-2 font-medium">
+                  <span>Total</span>
+                  <span>100.00%</span>
+                </li>
+              </>
+            )}
           </ul>
         </div>
       </div>
-
-      <section className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/70">
-        <table className="min-w-full text-sm">
-          <thead className="bg-slate-800 text-slate-300">
-            <tr>
-              <th className="px-4 py-3 text-left">Ticker</th>
-              <th className="px-4 py-3 text-right">Current Wt</th>
-              <th className="px-4 py-3 text-right">Target Wt</th>
-              <th className="px-4 py-3 text-right">Delta</th>
-              <th className="px-4 py-3 text-right">Action</th>
-            </tr>
-          </thead>
-          <tbody className="text-slate-200">
-            {[
-              ["AAPL", "20.10%", "24.70%", "+4.60%", "Buy"],
-              ["MSFT", "24.30%", "21.15%", "-3.15%", "Trim"],
-              ["NVDA", "10.20%", "13.85%", "+3.65%", "Buy"],
-              ["SPY", "31.40%", "28.40%", "-3.00%", "Trim"],
-              ["TLT", "14.00%", "11.90%", "-2.10%", "Trim"],
-            ].map((row) => (
-              <tr key={row[0]} className="border-t border-slate-800">
-                <td className="px-4 py-2">{row[0]}</td>
-                <td className="px-4 py-2 text-right tabular-nums">{row[1]}</td>
-                <td className="px-4 py-2 text-right tabular-nums">{row[2]}</td>
-                <td className="px-4 py-2 text-right tabular-nums">{row[3]}</td>
-                <td className="px-4 py-2 text-right">{row[4]}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
     </div>
   );
 }

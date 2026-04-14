@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
-import { checkPortfolio, getPortfolioMetrics, addAssetToPortfolio, optimizePortfolio } from "../lib/api";
+import { checkPortfolio, getPortfolioMetrics, addAssetToPortfolio, removeAssetFromPortfolio, optimizePortfolio } from "../lib/api";
 import PortfolioEmptyState from "@/components/PortfolioEmptyState";
 
 const Plot = dynamic<any>(() => import("react-plotly.js"), { ssr: false });
@@ -14,22 +14,25 @@ interface Metric {
   tone: string;
 }
 
-interface PortfolioData {
-  total_value: number;
-  daily_pnl: number;
-  daily_pnl_pct: number;
-  cumulative_return: number;
-  volatility: number;
-  var_95: number;
-  asset_breakdown: Array<{
-    ticker: string;
-    weight: number;
-    price: number;
-    value: number;
-  }>;
-  portfolio_values: Array<{ date: string; value: number }>;
-  correlation_matrix: Record<string, Record<string, number>>;
-}
+  interface PortfolioData {
+    total_invested: number;
+    total_value: number;
+    daily_pnl: number;
+    daily_pnl_pct: number;
+    cumulative_return: number;
+    volatility: number;
+    var_95: number;
+    asset_breakdown: Array<{
+      ticker: string;
+      amount_invested: number;
+      weight: number;
+      price: number;
+      quantity: number;
+      value: number;
+    }>;
+    portfolio_values: Array<{ date: string; value: number }>;
+    correlation_matrix: Record<string, Record<string, number>>;
+  }
 
 export default function DashboardPage() {
   const [portfolioExists, setPortfolioExists] = useState<boolean | null>(null);
@@ -40,7 +43,8 @@ export default function DashboardPage() {
   const [addAssetLoading, setAddAssetLoading] = useState(false);
   const [addAssetError, setAddAssetError] = useState<string | null>(null);
   const [newTicker, setNewTicker] = useState("");
-  const [newWeight, setNewWeight] = useState("");
+  const [newAmount, setNewAmount] = useState("");
+  const [removeAssetLoading, setRemoveAssetLoading] = useState<string | null>(null);
 
   const loadPortfolioData = async () => {
     setLoading(true);
@@ -75,17 +79,17 @@ export default function DashboardPage() {
     setAddAssetLoading(true);
 
     try {
-      const weight = parseFloat(newWeight);
-      if (!newTicker || !newWeight) {
-        throw new Error("Ticker and weight are required");
+      const amount = parseFloat(newAmount);
+      if (!newTicker || !newAmount) {
+        throw new Error("Ticker and investment amount are required");
       }
-      if (weight <= 0) {
-        throw new Error("Weight must be positive");
+      if (amount <= 0) {
+        throw new Error("Investment amount must be positive");
       }
 
-      await addAssetToPortfolio(newTicker.toUpperCase(), weight);
+      await addAssetToPortfolio(newTicker.toUpperCase(), amount);
       setNewTicker("");
-      setNewWeight("");
+      setNewAmount("");
       setShowAddAssetModal(false);
 
       // Reload portfolio data after adding asset (triggers live update)
@@ -94,6 +98,18 @@ export default function DashboardPage() {
       setAddAssetError(err instanceof Error ? err.message : "Failed to add asset");
     } finally {
       setAddAssetLoading(false);
+    }
+  };
+
+  const handleRemoveAsset = async (ticker: string) => {
+    setRemoveAssetLoading(ticker);
+    try {
+      await removeAssetFromPortfolio(ticker);
+      await loadPortfolioData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to remove asset");
+    } finally {
+      setRemoveAssetLoading(null);
     }
   };
 
@@ -117,13 +133,16 @@ export default function DashboardPage() {
 
     return [
       {
-        label: "Total Portfolio Value",
-        value: `$${portfolioData.total_value.toLocaleString(undefined, {
+        label: "Total Invested",
+        value: `$${portfolioData.total_invested.toLocaleString(undefined, {
           minimumFractionDigits: 2,
           maximumFractionDigits: 2,
         })}`,
-        delta: `${portfolioData.daily_pnl_pct.toFixed(2)}% (1D)`,
-        tone: portfolioData.daily_pnl >= 0 ? "text-emerald-300" : "text-rose-300",
+        delta: `Current Value: $${portfolioData.total_value.toLocaleString(undefined, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })}`,
+        tone: portfolioData.total_value >= portfolioData.total_invested ? "text-emerald-300" : "text-rose-300",
       },
       {
         label: "Daily P&L",
@@ -208,15 +227,14 @@ export default function DashboardPage() {
               </div>
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-300">Weight (0-1)</label>
+                <label className="mb-1 block text-sm font-medium text-slate-300">Investment Amount ($)</label>
                 <input
                   type="number"
-                  step="0.01"
+                  step="1000"
                   min="0"
-                  max="1"
-                  value={newWeight}
-                  onChange={(e) => setNewWeight(e.target.value)}
-                  placeholder="0.25"
+                  value={newAmount}
+                  onChange={(e) => setNewAmount(e.target.value)}
+                  placeholder="10000"
                   className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none ring-cyan-400/60 focus:ring-2"
                   disabled={addAssetLoading}
                 />
@@ -226,7 +244,7 @@ export default function DashboardPage() {
             <div className="mt-6 flex gap-3">
               <button
                 onClick={handleAddAsset}
-                disabled={addAssetLoading || !newTicker || !newWeight}
+                disabled={addAssetLoading || !newTicker || !newAmount}
                 className="flex-1 rounded-md bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-emerald-400 disabled:opacity-50"
               >
                 {addAssetLoading ? "Adding..." : "Add Asset"}
@@ -264,10 +282,10 @@ export default function DashboardPage() {
         </button>
         <button
           onClick={handleOptimize}
-          disabled={addAssetLoading}
+          disabled={addAssetLoading || removeAssetLoading !== null}
           className="rounded-md bg-amber-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-amber-400 transition disabled:opacity-50"
         >
-          Optimize (Equal Weight)
+          Rebalance (Equal $)
         </button>
       </div>
 
@@ -341,24 +359,45 @@ export default function DashboardPage() {
             <thead className="bg-slate-800 text-slate-300">
               <tr>
                 <th className="px-4 py-3 text-left">Ticker</th>
+                <th className="px-4 py-3 text-right">Amount Invested</th>
                 <th className="px-4 py-3 text-right">Weight</th>
                 <th className="px-4 py-3 text-right">Price</th>
-                <th className="px-4 py-3 text-right">Value</th>
+                <th className="px-4 py-3 text-right">Quantity</th>
+                <th className="px-4 py-3 text-right">Current Value</th>
+                <th className="px-4 py-3 text-center">Action</th>
               </tr>
             </thead>
             <tbody className="text-slate-200">
               {portfolioData.asset_breakdown.map((asset) => (
                 <tr key={asset.ticker} className="border-t border-slate-800">
                   <td className="px-4 py-2 font-medium">{asset.ticker}</td>
+                  <td className="px-4 py-2 text-right tabular-nums">
+                    ${asset.amount_invested.toLocaleString(undefined, {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </td>
                   <td className="px-4 py-2 text-right">{(asset.weight * 100).toFixed(2)}%</td>
                   <td className="px-4 py-2 text-right tabular-nums">
                     ${asset.price.toFixed(2)}
+                  </td>
+                  <td className="px-4 py-2 text-right tabular-nums">
+                    {asset.quantity.toFixed(2)}
                   </td>
                   <td className="px-4 py-2 text-right tabular-nums text-emerald-300">
                     ${asset.value.toLocaleString(undefined, {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
                     })}
+                  </td>
+                  <td className="px-4 py-2 text-center">
+                    <button
+                      onClick={() => handleRemoveAsset(asset.ticker)}
+                      disabled={removeAssetLoading !== null}
+                      className="text-xs px-2 py-1 rounded bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 disabled:opacity-50"
+                    >
+                      {removeAssetLoading === asset.ticker ? "..." : "Remove"}
+                    </button>
                   </td>
                 </tr>
               ))}
