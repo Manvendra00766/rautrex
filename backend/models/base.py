@@ -55,6 +55,8 @@ async def create_tables():
         await conn.run_sync(Base.metadata.create_all)
         # Run migrations for schema updates
         await _migrate_schema(conn)
+        # Create price_records table for data collector (synchronous)
+        await conn.run_sync(_create_price_records_table)
 
 
 async def _migrate_schema(conn):
@@ -71,3 +73,10 @@ async def _migrate_schema(conn):
     except Exception:
         # Column may already exist or table doesn't exist yet - this is fine
         pass
+
+
+def _create_price_records_table(conn):
+    """Create price_records table for market data caching (called synchronously via run_sync)."""
+    from backend.models.price import Base as PriceBase
+    # Create all tables from the price model's metadata
+    PriceBase.metadata.create_all(conn)

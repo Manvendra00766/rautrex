@@ -25,6 +25,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Optional
+import os
 
 import numpy as np
 import pandas as pd
@@ -33,11 +34,15 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from backend.models.price import Base, PriceRecord
+from backend.models.config import settings
 
 # ---------------------------------------------------------------------------
 # Defaults
 # ---------------------------------------------------------------------------
-DEFAULT_DB_URL = "sqlite:///data/rautrex.db"
+DEFAULT_DB_URL = os.getenv(
+    "DATABASE_URL",
+    settings.database_url
+)
 DEFAULT_INTERVAL = "1d"
 
 # ---------------------------------------------------------------------------
