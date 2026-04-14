@@ -21,8 +21,13 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 def hash_password(password: str) -> str:
-    """Hash a password with bcrypt. Includes a random salt internally."""
-    return pwd_context.hash(password[:72])
+    """Hash a password with bcrypt. Includes a random salt internally.
+    
+    Truncates to 72 bytes (bcrypt limit) to handle UTF-8 multi-byte characters.
+    """
+    pwd_bytes = password.encode('utf-8')[:72]
+    pwd_str = pwd_bytes.decode('utf-8', errors='ignore')
+    return pwd_context.hash(pwd_str)
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
