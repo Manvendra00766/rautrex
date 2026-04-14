@@ -70,7 +70,11 @@ async def log_requests(request: Request, call_next):
 @app.on_event("startup")
 async def on_startup():
     init_engine(settings.database_url)
-    await create_tables()
+    try:
+        await create_tables()
+        logger.info("Database tables created successfully")
+    except Exception as e:
+        logger.error(f"Failed to create tables: {e}")
     app.state.start_time = time.time()
     logger.info(f"Rautrex v0.2.0 started on {platform.system()}")
 
