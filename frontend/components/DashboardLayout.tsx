@@ -103,7 +103,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             <p className="text-xs text-slate-400">Live Session • US Equities + Macro</p>
           </div>
           <div className="flex items-center gap-4 text-xs text-slate-300 tabular-nums">
-            <span>Session P&L: +$2,481.37</span>
             <span className="rounded bg-emerald-500/20 px-2 py-1 text-emerald-300">API Healthy</span>
           </div>
         </header>
