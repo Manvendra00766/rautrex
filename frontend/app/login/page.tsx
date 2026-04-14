@@ -46,24 +46,6 @@ export default function LoginPage() {
         <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-8">
           <h1 className="text-3xl font-semibold tracking-tight">Rautrex Terminal</h1>
           <p className="mt-2 text-sm text-slate-400">Secure JWT access to quant research, risk, and execution tools.</p>
-          <div className="mt-8 grid grid-cols-2 gap-4">
-            <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-4">
-              <p className="text-xs uppercase text-slate-500">Portfolio NAV</p>
-              <p className="mt-1 text-xl font-semibold tabular-nums">$125,430.52</p>
-            </div>
-            <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-4">
-              <p className="text-xs uppercase text-slate-500">Today P&L</p>
-              <p className="mt-1 text-xl font-semibold text-emerald-300 tabular-nums">+$2,481.37</p>
-            </div>
-            <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-4">
-              <p className="text-xs uppercase text-slate-500">Sharpe (30D)</p>
-              <p className="mt-1 text-xl font-semibold tabular-nums">1.85</p>
-            </div>
-            <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-4">
-              <p className="text-xs uppercase text-slate-500">95% VaR (1D)</p>
-              <p className="mt-1 text-xl font-semibold text-amber-300 tabular-nums">$2,847.33</p>
-            </div>
-          </div>
         </section>
 
         <section className="w-full rounded-2xl border border-slate-800 bg-slate-900 p-8">
