@@ -45,9 +45,10 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
 
 
 # ─── CORS ───
+cors_origins = [origin.strip() for origin in settings.cors_origins.split(",")]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:8000", "https://rautrex.vercel.app"],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

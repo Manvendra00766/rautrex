@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
     frontend_url: str = "http://localhost:3000"
+    
+    # CORS origins (comma-separated, defaults to localhost)
+    cors_origins: str = "http://localhost:3000,http://localhost:8000"
+    
     resend_api_key: str = ""
     resend_from_email: str = "noreply@rautrex.dev"
     razorpay_key_id: str = ""
