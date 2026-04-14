@@ -8,7 +8,7 @@ from backend.models.config import settings
 
 def send_verification_email(to_email: str, token: str) -> None:
     if not settings.resend_api_key:
-        raise RuntimeError("RESEND_API_KEY is not configured.")
+        return
 
     verify_link = f"{settings.frontend_url.rstrip('/')}/verify-email?token={token}"
     payload = {
@@ -37,7 +37,7 @@ def send_verification_email(to_email: str, token: str) -> None:
 
 def send_payment_confirmation_email(to_email: str, plan: str, expires_at: str) -> None:
     if not settings.resend_api_key:
-        raise RuntimeError("RESEND_API_KEY is not configured.")
+        return
     payload = {
         "from": settings.resend_from_email,
         "to": [to_email],
@@ -65,7 +65,7 @@ def send_payment_confirmation_email(to_email: str, plan: str, expires_at: str) -
 
 def send_welcome_trial_email(to_email: str, trial_expires_at: str) -> None:
     if not settings.resend_api_key:
-        raise RuntimeError("RESEND_API_KEY is not configured.")
+        return
     payload = {
         "from": settings.resend_from_email,
         "to": [to_email],

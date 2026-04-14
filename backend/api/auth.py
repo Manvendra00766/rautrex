@@ -99,11 +99,8 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
 
     try:
         send_verification_email(user.email, token)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to send verification email: {exc}",
-        )
+    except Exception:
+        pass
 
     return MessageResponse(message="Registration successful!")
 
