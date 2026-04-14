@@ -100,15 +100,13 @@ def calculate_cumulative_returns(returns: np.ndarray) -> float:
 
 def calculate_portfolio_metrics(
     assets: list[dict],
-    period: str = "1y",
-    initial_value: float = 100000.0
+    period: str = "1y"
 ) -> dict:
     """Calculate comprehensive portfolio metrics from real market data.
     
     Args:
-        assets: List of {ticker, weight} dicts
+        assets: List of {ticker, amount_invested} dicts
         period: Historical period for calculations
-        initial_value: Starting portfolio value
         
     Returns:
         dict: {
@@ -125,18 +123,26 @@ def calculate_portfolio_metrics(
     if not assets or len(assets) == 0:
         raise ValueError("Portfolio must contain at least one asset")
     
+    # Calculate total invested and weights from amounts
+    total_invested = sum(asset["amount_invested"] for asset in assets)
+    if total_invested <= 0:
+        raise ValueError("Total investment must be positive")
+    
     # Fetch price data for all assets
     price_data = {}
     weights = {}
+    amounts = {}
     
     for asset in assets:
         ticker = asset["ticker"]
-        weight = asset["weight"]
+        amount = asset["amount_invested"]
+        weight = amount / total_invested  # Calculate weight from amount
         
         try:
             prices = fetch_price_data(ticker, period)
             price_data[ticker] = prices
             weights[ticker] = weight
+            amounts[ticker] = amount
         except Exception as e:
             logger.error(f"Failed to fetch {ticker}: {str(e)}")
             raise ValueError(f"Failed to fetch data for {ticker}")
@@ -172,18 +178,20 @@ def calculate_portfolio_metrics(
     # Calculate current portfolio value
     latest_prices = df_prices.iloc[-1]
     daily_return = portfolio_returns[-1] if len(portfolio_returns) > 0 else 0.0
-    current_value = initial_value * np.exp(np.sum(portfolio_returns))
-    daily_pnl = current_value - (initial_value * np.exp(np.sum(portfolio_returns[:-1])))
+    current_value = total_invested * np.exp(np.sum(portfolio_returns))
+    daily_pnl = current_value - (total_invested * np.exp(np.sum(portfolio_returns[:-1])))
     
-    # Asset breakdown
+    # Asset breakdown (using actual invested amounts)
     asset_breakdown = []
     for ticker in df_prices.columns:
         price = latest_prices[ticker]
-        quantity = (initial_value * weights[ticker]) / price
+        amount = amounts[ticker]
+        quantity = amount / price  # Calculate quantity from amount and current price
         value = quantity * price
         asset_breakdown.append({
             "ticker": ticker,
-            "weight": weights[ticker],
+            "amount_invested": float(amount),
+            "weight": float(weights[ticker]),
             "price": float(price),
             "quantity": float(quantity),
             "value": float(value),
@@ -201,7 +209,7 @@ def calculate_portfolio_metrics(
     # Portfolio price series
     portfolio_values = []
     for i in range(len(df_prices)):
-        pv = initial_value * np.exp(np.sum(portfolio_returns[:i]))
+        pv = total_invested * np.exp(np.sum(portfolio_returns[:i]))
         portfolio_values.append({
             "date": str(df_prices.index[i].date()),
             "value": float(pv)
@@ -212,6 +220,7 @@ def calculate_portfolio_metrics(
     correlation_matrix = correlation_returns.corr().to_dict()
     
     return {
+        "total_invested": float(total_invested),
         "total_value": float(current_value),
         "daily_pnl": float(daily_pnl),
         "daily_pnl_pct": float(daily_return * 100),
