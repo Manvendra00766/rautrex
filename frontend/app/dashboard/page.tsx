@@ -15,6 +15,9 @@ interface Metric {
 }
 
   interface PortfolioData {
+    success?: boolean;
+    has_sufficient_data?: boolean;
+    message?: string;
     total_invested: number;
     total_value: number;
     daily_pnl: number;
